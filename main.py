@@ -33,8 +33,14 @@ class Resnet50Classifer(pl.LightningModule):
         return y
 
     def configure_optimizers(self):
-        optimiser = optim.SGD(self.parameters(), lr=LEARNING_RATE)
-        return optimiser
+        optimizer = optim.Adam(self.parameters(), lr=LEARNING_RATE)
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=3, verbose=True)
+
+        return {
+            'optimizer': optimizer,
+            'lr_scheduler': scheduler,
+            'monitor': 'val_loss'
+        }
 
     def setup(self, stage: str):
         def target_transform(y):
