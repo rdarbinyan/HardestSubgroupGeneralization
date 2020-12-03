@@ -15,6 +15,7 @@ from configs import DATASET_DIR, EPOCHS, SHOW_TYPE_COUNTS, BATCH_SIZE, LEARNING_
 
 
 class Resnet50Classifer(pl.LightningModule):
+    #TODO add hyperparameters to constructor input!
     def __init__(self, *args, **kwargs):
         # init a pretrained resnet
         super().__init__(*args, **kwargs)
@@ -103,10 +104,11 @@ class Resnet50Classifer(pl.LightningModule):
         group_acc = compute_group_avg((torch.argmax(y_hat,1)==y['Blond_Hair']).float())
 
         cross_entropy = losses.mean()
-        loss = cross_entropy + HSIC_WEIGHT * HSIC(group_map, y_hat)
+        hsic = HSIC(group_map, y_hat)
+        loss = cross_entropy + HSIC_WEIGHT * hsic
         metrics = {
             'cross_entropy':cross_entropy,
-            'hsic': HSIC(group_map, y_hat),
+            'hsic': hsic,
 
             'loss': loss,
             'loss_group_0': group_loss[0],
@@ -141,7 +143,7 @@ class Resnet50Classifer(pl.LightningModule):
 
 model = Resnet50Classifer()
 
-tb_logger = pl_loggers.TensorBoardLogger('logs/')
+tb_logger = pl_loggers.TensorBoardLogger('logs/', version='erm')
 
 
 

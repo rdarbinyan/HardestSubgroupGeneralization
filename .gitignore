@@ -1,6 +1,9 @@
 .idea
 
 /logs
+/prev_logs
 
 /run.pid
-/output.log
+/output_*.log
+
+/tensorboard.pid
