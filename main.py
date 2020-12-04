@@ -10,8 +10,8 @@ from pytorch_lightning.metrics.functional import accuracy
 from pytorch_lightning import loggers as pl_loggers
 from constants import GROUP_TYPES, CELEBA_ATTRIBUTE_NAMES
 from hsic import HSIC
-from configs import DATASET_DIR, EPOCHS, SHOW_TYPE_COUNTS, BATCH_SIZE, LEARNING_RATE, HSIC_WEIGHT, GPUS, PBAR_REFRESH_RATE
-
+from configs import DATASET_DIR, EPOCHS, SHOW_TYPE_COUNTS, BATCH_SIZE, LEARNING_RATE, HSIC_WEIGHT, GPUS, \
+    PBAR_REFRESH_RATE, LR_SCHEDULER_PATIENCE
 
 
 class Resnet50Classifer(pl.LightningModule):
@@ -35,7 +35,7 @@ class Resnet50Classifer(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=LEARNING_RATE)
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=3, verbose=True)
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', factor=0.1, patience=LR_SCHEDULER_PATIENCE, verbose=True)
 
         return {
             'optimizer': optimizer,
@@ -89,7 +89,6 @@ class Resnet50Classifer(pl.LightningModule):
         # 1 forward
         y_hat = self.forward(x)
 
-        # 2 compute the objective function
         losses = self.loss(y_hat, y['Blond_Hair'])
 
         acc = accuracy(y_hat, y['Blond_Hair'])
@@ -143,7 +142,7 @@ class Resnet50Classifer(pl.LightningModule):
 
 model = Resnet50Classifer()
 
-tb_logger = pl_loggers.TensorBoardLogger('logs/', version='erm')
+tb_logger = pl_loggers.TensorBoardLogger('logs/', version='hsic_50')
 
 
 
@@ -152,6 +151,8 @@ trainer = pl.Trainer(max_epochs=EPOCHS, gpus=GPUS, progress_bar_refresh_rate=PBA
 
 tb_logger.log_hyperparams({'BATCH_SIZE': BATCH_SIZE,
                            'LEARNING_RATE': LEARNING_RATE,
-                           'HSIC_WEIGHT': HSIC_WEIGHT})
+                           'HSIC_WEIGHT': HSIC_WEIGHT,
+                           'LR_SCHEDULER': 'ReduceLROnPlateau',
+                           'LR_SCHEDULER_PATIENCE': LR_SCHEDULER_PATIENCE})
 
 trainer.fit(model)
