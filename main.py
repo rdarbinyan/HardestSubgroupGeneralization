@@ -93,7 +93,7 @@ class Resnet50Classifer(pl.LightningModule):
 
         acc = accuracy(y_hat, y['Blond_Hair'])
 
-        group_map = one_hot(y['group_idx'], num_classes=4).float()
+        group_map = one_hot(y['group_idx'] % 2, num_classes=2).float()   # female to 1 0, male to
         group_count = group_map.sum(0)
         n = group_count + (group_count == 0).float()  # avoid nans
 
