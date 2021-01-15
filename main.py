@@ -93,7 +93,8 @@ class Resnet50Classifer(pl.LightningModule):
 
         acc = accuracy(y_hat, y['Blond_Hair'])
 
-        group_map = one_hot(y['group_idx'] % 2, num_classes=2).float()   # female to 1 0, male to
+        group_map = one_hot(y['group_idx'], num_classes=4).float()
+
         group_count = group_map.sum(0)
         n = group_count + (group_count == 0).float()  # avoid nans
 
@@ -103,7 +104,10 @@ class Resnet50Classifer(pl.LightningModule):
         group_acc = compute_group_avg((torch.argmax(y_hat,1)==y['Blond_Hair']).float())
 
         cross_entropy = losses.mean()
-        hsic = HSIC(group_map, y_hat)
+
+        c = one_hot(y['group_idx'] % 2, num_classes=2).float()   # female to 1 0, male to
+        hsic = HSIC(c, y_hat)
+
         loss = cross_entropy + HSIC_WEIGHT * hsic
         metrics = {
             'cross_entropy':cross_entropy,
