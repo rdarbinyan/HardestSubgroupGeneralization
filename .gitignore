@@ -3,7 +3,5 @@
 /logs
 /prev_logs
 
-/run.pid
-/output_*.log
-
-/tensorboard.pid
+*.pid
+*.log

@@ -1,0 +1,5 @@
+# @package _group_
+name: resnet50
+
+pretrained: True
+num_target_classes: 2

@@ -1,0 +1,1 @@
+from src.datasets.celeba import CelebADataModule
