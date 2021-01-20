@@ -103,6 +103,7 @@ class Model(pl.LightningModule, ConfigParser):
     def training_step(self, batch, batch_idx):
         loss, metrics = self.step(batch, batch_idx)
         metrics = {f'train_{key}': metrics[key] for key in metrics}
+        metrics.update({"learning_rate": self.trainer.optimizers[0].param_groups[0]["lr"]})
         self.log_dict(metrics, on_step=False, on_epoch=True, prog_bar=True)
 
         return loss
