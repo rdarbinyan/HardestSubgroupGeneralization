@@ -2,3 +2,4 @@
 name: constant_weight
 
 weight: 10
+on_output: True  #  calculates HSIC on output if True else calculates on the last hidden layer

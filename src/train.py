@@ -59,15 +59,20 @@ class Model(pl.LightningModule, ConfigParser):
         return group_cross_entropy, group_acc
 
     def step(self, batch, batch_idx):
+        global hsic, y_hat
+
         x, y = batch
         c = one_hot(y['group_idx'] % 2, num_classes=2).float()  # female to 1 0, male to
 
-        y_hat = self.forward(x)
+        if self.config.hsic.on_output:
+            y_hat = self.forward(x)
+            hsic = HSIC(c, y_hat)
+        else:
+            y_hat, emb = self.network.get_y_and_emb(x)
+            hsic = HSIC(emb, y_hat)
 
         cross_entropies = self.cross_entropy(y_hat, y['Blond_Hair'])
-
         cross_entropy = cross_entropies.mean()
-        hsic = HSIC(c, y_hat)
         acc = accuracy(y_hat, y['Blond_Hair'])
         loss = cross_entropy + self.config.hsic.weight * hsic
 

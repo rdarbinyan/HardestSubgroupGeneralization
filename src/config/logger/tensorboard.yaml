@@ -1,5 +1,5 @@
 # @package _group_
 name: tensorboard
 
-run_name: null
+run_name: default
 run_version: null
