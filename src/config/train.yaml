@@ -1,5 +1,5 @@
 random_seed: 0
-logs_root_dir: "../logs"
+logs_root_dir: "./logs"
 
 defaults:
   - dataset: celeba
