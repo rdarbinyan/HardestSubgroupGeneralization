@@ -19,10 +19,6 @@ class LoggerConf(ABC):
     def get_logger(self, *args) -> Optional[LightningLoggerBase]:
         pass
 
-    @abstractmethod
-    def get_run_version(self, *args):
-        pass
-
 
 @dataclass(frozen=True)
 class DisabledLoggerConf(LoggerConf):

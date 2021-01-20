@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Any
 
 from pydantic.dataclasses import dataclass
 from omegaconf import DictConfig
@@ -30,6 +30,7 @@ class TrainConf:
     scheduler: SchedulerConf
     logger: LoggerConf
     trainer: TrainerConf
+    hsic: Any  # DictConfig (pydantic gives error on DictConfig)
 
 
 class ConfigParser:
@@ -44,5 +45,6 @@ class ConfigParser:
             scheduler=scheduler_conf.get_config_obj(cfg.scheduler),
             logger=logger_conf.get_config_obj(cfg.logger),
             trainer=trainer_conf.get_config_obj(cfg.trainer),
+            hsic=cfg.hsic
         )
         return config

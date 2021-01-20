@@ -11,10 +11,8 @@ import utils
 from src.config_parser.train import ConfigParser
 from src.utils.hsic import HSIC
 
-# TODO move this to hydra
-HSIC_WEIGHT = 10
-
 log = logging.getLogger(__name__)
+
 
 class Model(pl.LightningModule, ConfigParser):
     def __init__(self, cfg: DictConfig):
@@ -25,7 +23,7 @@ class Model(pl.LightningModule, ConfigParser):
 
         self.network = self.config.network.get_network()
 
-        self.loss = nn.CrossEntropyLoss(reduction='none')
+        self.cross_entropy = nn.CrossEntropyLoss(reduction='none')
 
     def forward(self, x):
         outputs = self.network(x)
@@ -47,16 +45,7 @@ class Model(pl.LightningModule, ConfigParser):
 
         return ret_opt
 
-    def step(self, batch, batch_idx):
-        x, y = batch
-
-        # 1 forward
-        y_hat = self.forward(x)
-
-        losses = self.loss(y_hat, y['Blond_Hair'])
-
-        acc = accuracy(y_hat, y['Blond_Hair'])
-
+    def __get_group_metrics(self, y, y_hat, cross_entropies):
         group_map = one_hot(y['group_idx'], num_classes=4).float()
 
         group_count = group_map.sum(0)
@@ -64,26 +53,37 @@ class Model(pl.LightningModule, ConfigParser):
 
         compute_group_avg = lambda m: ((group_map.t() @ m.view(-1).cuda()) / n)
 
-        group_loss = compute_group_avg(losses)
-        group_acc = compute_group_avg((torch.argmax(y_hat,1)==y['Blond_Hair']).float())
+        group_cross_entropy = compute_group_avg(cross_entropies)
+        group_acc = compute_group_avg((torch.argmax(y_hat, 1) == y['Blond_Hair']).float())
 
-        cross_entropy = losses.mean()
+        return group_cross_entropy, group_acc
 
-        c = one_hot(y['group_idx'] % 2, num_classes=2).float()   # female to 1 0, male to
+    def step(self, batch, batch_idx):
+        x, y = batch
+        c = one_hot(y['group_idx'] % 2, num_classes=2).float()  # female to 1 0, male to
+
+        y_hat = self.forward(x)
+
+        cross_entropies = self.cross_entropy(y_hat, y['Blond_Hair'])
+
+        cross_entropy = cross_entropies.mean()
         hsic = HSIC(c, y_hat)
+        acc = accuracy(y_hat, y['Blond_Hair'])
+        loss = cross_entropy + self.config.hsic.weight * hsic
 
-        loss = cross_entropy + HSIC_WEIGHT * hsic
+        group_cross_entropy, group_acc = self.__get_group_metrics(y, y_hat, cross_entropies)
+
         metrics = {
-            'cross_entropy':cross_entropy,
-            'hsic': hsic,
-
-            'loss': loss,
-            'loss_group_0': group_loss[0],
-            'loss_group_1': group_loss[1],
-            'loss_group_2': group_loss[2],
-            'loss_group_3': group_loss[3],
-
             'acc': acc,
+            'loss': loss,
+            'hsic': hsic,
+            'cross_entropy': cross_entropy,
+
+            'cross_entropy_group_0': group_cross_entropy[0],
+            'cross_entropy_group_1': group_cross_entropy[1],
+            'cross_entropy_group_2': group_cross_entropy[2],
+            'cross_entropy_group_3': group_cross_entropy[3],
+
             'acc_group_0': group_acc[0],
             'acc_group_1': group_acc[1],
             'acc_group_2': group_acc[2],
@@ -94,17 +94,18 @@ class Model(pl.LightningModule, ConfigParser):
 
     def training_step(self, batch, batch_idx):
         loss, metrics = self.step(batch, batch_idx)
-        metrics = {f'train_{key}':metrics[key] for key in metrics}
+        metrics = {f'train_{key}': metrics[key] for key in metrics}
         self.log_dict(metrics, on_step=False, on_epoch=True, prog_bar=True)
 
         return loss
 
     def validation_step(self, batch, batch_idx):
         loss, metrics = self.step(batch, batch_idx)
-        metrics = {f'val_{key}':metrics[key] for key in metrics}
+        metrics = {f'val_{key}': metrics[key] for key in metrics}
         self.log_dict(metrics, on_step=False, on_epoch=True, prog_bar=True)
 
         return loss
+
 
 @hydra.main(config_path="config", config_name="train")
 def main(cfg: DictConfig):
@@ -124,7 +125,6 @@ def main(cfg: DictConfig):
     trainer = config.trainer.get_trainer(logger, config.logs_root_dir)
 
     trainer.fit(model, datamodule=datamodule)
-
 
 
 if __name__ == '__main__':

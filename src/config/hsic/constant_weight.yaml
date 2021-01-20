@@ -1,0 +1,4 @@
+# @package _group_
+name: constant_weight
+
+weight: 10
