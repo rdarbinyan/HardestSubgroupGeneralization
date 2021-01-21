@@ -2,10 +2,11 @@
 name: celeba
 
 data_root: /home/rafayel/datasets
+download: False
 batch_size: 64
 num_workers: 4
 
 confounder_name: Male
 target_name: Blond_Hair
 
-count_types_and_log: False
+sampler: weighted

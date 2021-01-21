@@ -20,11 +20,12 @@ class DatasetConf(ABC):
 @dataclass(frozen=True)
 class CelebAConf(DatasetConf):
     data_root: str
+    download: bool
     batch_size: int
     num_workers: int
     confounder_name: str
     target_name: str
-    count_types_and_log: bool
+    sampler: str
 
     def get_datamodule(self) -> pl.LightningDataModule:
         return CelebADataModule(**asdict_filtered(self))
