@@ -20,6 +20,7 @@ class TrainerConf(ABC):
 @dataclass(frozen=True)
 class StandardTrainerConfig(TrainerConf):
     gpus: int
+    precision: int
     max_epochs: int
 
     log_every_n_steps: int
