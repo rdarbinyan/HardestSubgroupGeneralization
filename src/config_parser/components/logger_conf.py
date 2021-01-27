@@ -7,6 +7,7 @@ from omegaconf import DictConfig
 from pydantic.dataclasses import dataclass
 from pytorch_lightning import loggers as pl_loggers
 from pytorch_lightning.loggers.base import LightningLoggerBase
+from aim.pytorch_lightning import AimLogger
 
 from src.config_parser.utils import asdict_filtered, get_config_obj_generic
 
@@ -41,10 +42,22 @@ class TensorboardConf(LoggerConf):
 
         return tb_logger
 
+@dataclass(frozen=True)
+class AimConf(LoggerConf):
+    experiment: str
+
+    def get_logger(self, save_dir: Path, *args) -> Optional[LightningLoggerBase]:
+        args_dict = asdict_filtered(self)
+        experiment = args_dict.pop("experiment")
+        aim_logger = AimLogger(repo=str(save_dir), experiment=experiment, **args_dict)
+
+        return aim_logger
+
 
 valid_names = {
     "disabled": DisabledLoggerConf,
-    "tensorboard": TensorboardConf
+    "tensorboard": TensorboardConf,
+    "aim": AimConf,
 }
 
 

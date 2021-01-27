@@ -13,3 +13,5 @@ dependencies:
   - pydantic=1.7.3
   - omegaconf=2.0.5
   - hydra-core=1.0.5
+  - pip:
+      - aim
