@@ -77,7 +77,14 @@ class Model(pl.LightningModule, ConfigParser):
         cross_entropies = self.cross_entropy(y_hat, y['Blond_Hair'])
         cross_entropy = cross_entropies.mean()
         acc = accuracy(y_hat, y['Blond_Hair'])
-        loss = cross_entropy + self.config.hsic.weight * hsic
+
+        global hsic_weight
+        if self.config.hsic.name == "constant_weight":
+            hsic_weight =  self.config.hsic.weight
+        else:
+            hsic_weight = self.config.hsic.start_weight + (self.trainer.current_epoch // self.config.hsic.frequency) * self.config.hsic.step
+
+        loss = cross_entropy + hsic_weight * hsic
 
         group_cross_entropy, group_acc = self.__get_group_metrics(y, y_hat, cross_entropies)
 
@@ -85,6 +92,7 @@ class Model(pl.LightningModule, ConfigParser):
             'acc': acc,
             'loss': loss,
             'hsic': hsic,
+            'hsic_weight': hsic_weight,
             'cross_entropy': cross_entropy,
 
             'cross_entropy_group_0': group_cross_entropy[0],
