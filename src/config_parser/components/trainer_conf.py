@@ -22,6 +22,7 @@ class StandardTrainerConfig(TrainerConf):
     gpus: int
     precision: int
     max_epochs: int
+    checkpoint_callback: bool # in the future, will checkpoint type will be allowed
 
     log_every_n_steps: int
     progress_bar_refresh_rate: int

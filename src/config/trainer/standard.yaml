@@ -4,6 +4,7 @@ name: standard
 gpus: 1
 precision: 32
 max_epochs: 30
+checkpoint_callback: False
 
 log_every_n_steps: 50
 progress_bar_refresh_rate: 50
