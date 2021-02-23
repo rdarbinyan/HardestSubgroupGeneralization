@@ -65,7 +65,9 @@ class Model(pl.LightningModule, ConfigParser):
         global hsic, y_hat
 
         x, y = batch
-        c = one_hot(y['group_idx'] % 2, num_classes=2).float()  # female to 1 0, male to
+        group_indices = y['group_idx']
+
+        c = one_hot(group_indices % 2, num_classes=2).float()  # female to 1 0, male to
 
         if self.config.hsic.on_output:
             y_hat = self.forward(x)
@@ -75,6 +77,13 @@ class Model(pl.LightningModule, ConfigParser):
             hsic = HSIC(emb, y_hat)
 
         cross_entropies = self.cross_entropy(y_hat, y['Blond_Hair'])
+
+        if self.config.trainer.importance_weighting:
+            train_group_counts = self.datamodule.train_group_counts.to(device=group_indices.get_device())
+            count = torch.sum(train_group_counts)
+            importance_weights = torch.matmul(one_hot(group_indices, num_classes=4).float(), count / train_group_counts)
+            cross_entropies *= importance_weights
+
         cross_entropy = cross_entropies.mean()
         acc = accuracy(y_hat, y['Blond_Hair'])
 
@@ -138,10 +147,11 @@ def main(cfg: DictConfig):
     datamodule = config.dataset.get_datamodule()
 
     model = Model(cfg)
+    model.datamodule = datamodule
 
     trainer = config.trainer.get_trainer(logger, config.logs_root_dir)
 
-    trainer.fit(model, datamodule=datamodule)
+    trainer.fit(model)
 
 
 if __name__ == '__main__':
