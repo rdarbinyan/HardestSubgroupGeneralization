@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Optional
 
 import pytorch_lightning as pl
 from pydantic.dataclasses import dataclass
@@ -25,7 +26,7 @@ class CelebAConf(DatasetConf):
     num_workers: int
     confounder_name: str
     target_name: str
-    sampler: str
+    sampler: Optional[str]
 
     def get_datamodule(self) -> pl.LightningDataModule:
         return CelebADataModule(**asdict_filtered(self))
