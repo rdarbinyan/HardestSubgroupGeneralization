@@ -68,28 +68,45 @@ class CelebADataModule(pl.LightningDataModule):
                                           split='train',
                                           download=self.download,
                                           target_transform=self.__target_transform,
-                                          transform=transforms.ToTensor())
+                                          transform=transforms.Compose([
+                                              transforms.RandomResizedCrop(
+                                                  (224, 224),
+                                                  scale=(0.7, 1.0),
+                                                  ratio=(1.0, 1.3333333333333333),
+                                                  interpolation=2),
+                                              transforms.RandomHorizontalFlip(),
+                                              transforms.ToTensor(),
+                                              transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                                          ]))
 
         self.val_data = datasets.CelebA(self.data_root,
                                         target_type='attr',
                                         split='valid',
                                         download=self.download,
                                         target_transform=self.__target_transform,
-                                        transform=transforms.ToTensor())
+                                        transform=transforms.Compose([
+                                            transforms.CenterCrop(224),
+                                            transforms.Resize((224, 224)),
+                                            transforms.ToTensor(),
+                                            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                                        ]))
 
         self.__set_group_counts()
 
     def train_dataloader(self) -> DataLoader:
         sampler = None
+        shuffle = True
         if self.sampler == "weighted":
             group_weights = len(self.train_data) / self.train_group_counts
             weights = group_weights[self.train_group_indices]
             sampler = WeightedRandomSampler(weights, len(self.train_data), replacement=True)
+            shuffle = False
 
         train_loader = DataLoader(self.train_data,
                                   sampler=sampler,
                                   batch_size=self.batch_size,
                                   num_workers=self.num_workers,
+                                  shuffle=shuffle,
                                   pin_memory=True)
 
         return train_loader
