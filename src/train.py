@@ -28,6 +28,10 @@ class Model(pl.LightningModule, ConfigParser):
 
         self.cross_entropy = nn.CrossEntropyLoss(reduction='none')
 
+        self.group_weights = torch.ones(4)
+        self.group_weights = self.group_weights / self.group_weights.sum()
+        self.group_weights = self.group_weights.to('cpu')
+
     def forward(self, x):
         outputs = self.network(x)
         return outputs
@@ -61,7 +65,7 @@ class Model(pl.LightningModule, ConfigParser):
 
         return group_cross_entropy, group_acc
 
-    def step(self, batch, batch_idx):
+    def step(self, batch, is_train=True):
         global hsic, y_hat
 
         x, y = batch
@@ -77,25 +81,28 @@ class Model(pl.LightningModule, ConfigParser):
             hsic = HSIC(emb, y_hat)
 
         cross_entropies = self.cross_entropy(y_hat, y['Blond_Hair'])
+        group_cross_entropy, group_acc = self.__get_group_metrics(y, y_hat, cross_entropies)
 
-        if self.config.trainer.importance_weighting:
-            train_group_counts = self.datamodule.train_group_counts.to(device=group_indices.get_device())
-            count = torch.sum(train_group_counts)
-            importance_weights = torch.matmul(one_hot(group_indices, num_classes=4).float(), count / train_group_counts)
-            cross_entropies *= importance_weights
+        if self.config.trainer.group_dro and is_train:
+            self.group_weights = self.group_weights * torch.exp(self.config.trainer.group_weight_step * group_cross_entropy.to('cpu'))
+            self.group_weights = (self.group_weights / (self.group_weights.sum()))
+
+        group_indices_one_hot = one_hot(group_indices, 4).float()
+
+        weights = torch.matmul(group_indices_one_hot, self.group_weights.to(group_indices_one_hot.device))
+
+        cross_entropies *= torch.tensor(weights)
 
         cross_entropy = cross_entropies.mean()
         acc = accuracy(y_hat, y['Blond_Hair'])
 
         global hsic_weight
         if self.config.hsic.name == "constant_weight":
-            hsic_weight =  self.config.hsic.weight
+            hsic_weight = self.config.hsic.weight
         else:
             hsic_weight = self.config.hsic.start_weight + (self.trainer.current_epoch // self.config.hsic.frequency) * self.config.hsic.step
 
         loss = cross_entropy + hsic_weight * hsic
-
-        group_cross_entropy, group_acc = self.__get_group_metrics(y, y_hat, cross_entropies)
 
         metrics = {
             'acc': acc,
@@ -113,20 +120,25 @@ class Model(pl.LightningModule, ConfigParser):
             'acc_group_1': group_acc[1],
             'acc_group_2': group_acc[2],
             'acc_group_3': group_acc[3],
+
+            'w_group_0': self.group_weights[0],
+            'w_group_1': self.group_weights[1],
+            'w_group_2': self.group_weights[2],
+            'w_group_3': self.group_weights[3],
         }
 
         return loss, metrics
 
-    def training_step(self, batch, batch_idx):
-        loss, metrics = self.step(batch, batch_idx)
+    def training_step(self, batch, *args, **kwargs):
+        loss, metrics = self.step(batch)
         metrics = {f'train_{key}': metrics[key] for key in metrics}
         metrics.update({"learning_rate": self.trainer.optimizers[0].param_groups[0]["lr"]})
         self.log_dict(metrics, on_step=False, on_epoch=True, prog_bar=True)
 
         return loss
 
-    def validation_step(self, batch, batch_idx):
-        loss, metrics = self.step(batch, batch_idx)
+    def validation_step(self, batch, *args, **kwargs):
+        loss, metrics = self.step(batch, is_train=False)
         metrics = {f'val_{key}': metrics[key] for key in metrics}
         self.log_dict(metrics, on_step=False, on_epoch=True, prog_bar=True)
 

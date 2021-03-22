@@ -3,5 +3,5 @@ name: sgd
 
 lr: 1e-4
 momentum: 0.9
-weight_decay: 0.0
+weight_decay: 1e-4
 nesterov: False

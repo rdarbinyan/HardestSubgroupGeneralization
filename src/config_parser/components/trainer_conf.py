@@ -23,7 +23,8 @@ class StandardTrainerConfig(TrainerConf):
     precision: int
     max_epochs: int
     checkpoint_callback: bool # in the future, will checkpoint type will be allowed
-    importance_weighting: bool
+    group_dro: bool
+    group_weight_step: float
 
     log_every_n_steps: int
     progress_bar_refresh_rate: int
@@ -31,7 +32,8 @@ class StandardTrainerConfig(TrainerConf):
     def get_trainer(self, pl_logger: LightningLoggerBase, default_root_dir: str) -> pl.Trainer:
         args = asdict_filtered(self)
 
-        del args["importance_weighting"]
+        del args["group_dro"]
+        del args["group_weight_step"]
 
         trainer = pl.Trainer(
             logger=pl_logger,

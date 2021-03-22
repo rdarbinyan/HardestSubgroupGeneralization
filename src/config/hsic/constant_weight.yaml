@@ -1,5 +1,5 @@
 # @package _group_
 name: constant_weight
 
-weight: 10
+weight: 0
 on_output: False  #  calculates HSIC on output if True else calculates on the last hidden layer
