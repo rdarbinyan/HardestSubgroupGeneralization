@@ -2,8 +2,8 @@
 name: standard
 
 gpus: 1
-precision: 32
-max_epochs: 30
+precision: 16
+max_epochs: 50
 checkpoint_callback: False
 group_dro: False
 group_weight_step: 0.1

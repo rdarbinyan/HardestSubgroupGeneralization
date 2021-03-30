@@ -15,43 +15,42 @@ python src/train.py dataset.data_root={Root directory where images are downloade
 ```
 random_seed: 0
 logs_root_dir: ./logs
-dataset:
-  name: celeba
-  data_root: /home/rafayel/datasets
-  download: false
-  batch_size: 64
-  num_workers: 4
-  confounder_name: Male
-  target_name: Blond_Hair
-  sampler: weighted
-network:
-  name: resnet50
-  pretrained: true
-  num_target_classes: 2
-optimizer:
-  name: adam
-  lr: 0.001
+dataset:                                                                                                                                                                                                                                      
+  name: celeba                                                                                                                                                                                                                                
+  data_root: /home/rafayel/datasets                                                                                                                                                                                                                     
+  download: false                                                                                                                                                                                                                             
+  batch_size: 128                                                                                                                                                                                                                             
+  num_workers: 0                                                                                                                                                                                                                              
+  confounder_name: Male                                                                                                                                                                                                                       
+  target_name: Blond_Hair                                                                                                                                                                                                                     
+  sampler: None                                                                                                                                                                                                                               
+network:                                                                                                                                                                                                                                      
+  name: resnet50                                                                                                                                                                                                                              
+  pretrained: true                                                                                                                                                                                                                            
+  num_target_classes: 2                                                                                                                                                                                                                       
+optimizer:                                                                                                                                                                                                                                    
+  name: sgd                                                                                                                                                                                                                                   
+  lr: 0.0001                                                                                                                                                                                                                                  
+  momentum: 0.9                                                                                                                                                                                                                               
+  weight_decay: 0.0001
+  nesterov: false
 trainer:
   name: standard
   gpus: 1
-  max_epochs: 30
+  precision: 16
+  max_epochs: 50
+  checkpoint_callback: false
+  group_dro: false
+  group_weight_step: 0.1
   log_every_n_steps: 50
   progress_bar_refresh_rate: 50
 scheduler:
-  name: plateau
-  factor: 0.1
-  patience: 5
-  mode: min
-  threshold: 0.0001
-  cooldown: 0
-  eps: 1.0e-08
-  verbose: false
+  name: disabled
 logger:
   name: tensorboard
   run_name: default
   run_version: null
 hsic:
   name: constant_weight
-  weight: 10
-  on_output: true
+  weight: 0
 ```

@@ -1,4 +1,6 @@
 import sys, os
+from typing import List, Any
+
 sys.path.append(os.path.dirname(sys.path[0]))
 
 import torch
@@ -26,11 +28,11 @@ class Model(pl.LightningModule, ConfigParser):
 
         self.network = self.config.network.get_network()
 
-        self.cross_entropy = nn.CrossEntropyLoss(reduction='none')
+        self.__cross_entropy = nn.CrossEntropyLoss(reduction='none')
 
-        self.group_weights = torch.ones(4)
-        self.group_weights = self.group_weights / self.group_weights.sum()
-        self.group_weights = self.group_weights.to('cpu')
+        self.__hsic_weight = 0
+
+        self.__group_weights = self.__get_initial_group_weights(4)  # sets (1/n, 1/n, 1/n, 1/n)
 
     def forward(self, x):
         outputs = self.network(x)
@@ -52,97 +54,151 @@ class Model(pl.LightningModule, ConfigParser):
 
         return ret_opt
 
-    def __get_group_metrics(self, y, y_hat, cross_entropies):
+    def training_step(self, batch, *args, **kwargs):
+        return self.__step(batch)
+
+    def validation_step(self, batch, *args, **kwargs):
+        return self.__step(batch)
+
+    def training_epoch_end(self, outputs: List[Any]) -> None:
+        epoch_metrics = self.__calculate_epoch_metrics(outputs)
+        epoch_metrics = {f'train_{key}': epoch_metrics[key] for key in epoch_metrics}
+
+        self.logger.log_metrics(epoch_metrics, self.trainer.current_epoch)
+
+    def validation_epoch_end(self, outputs: List[Any]) -> None:
+        epoch_metrics = self.__calculate_epoch_metrics(outputs)
+        epoch_metrics = {f'val_{key}': epoch_metrics[key] for key in epoch_metrics}
+
+        self.logger.log_metrics(epoch_metrics, self.trainer.current_epoch)
+
+    @staticmethod
+    def __get_initial_group_weights(groups_count):
+        group_weights = torch.ones(groups_count)
+        group_weights = group_weights / group_weights.sum()
+        group_weights = group_weights.to('cpu')
+
+        return group_weights
+
+    @staticmethod
+    def __get_group_metrics(y, y_hat, cross_entropies):
         group_map = one_hot(y['group_idx'], num_classes=4).float()
 
-        group_count = group_map.sum(0)
-        n = group_count + (group_count == 0).float()  # avoid nans
+        group_counts = group_map.sum(0)
+        n = group_counts + (group_counts == 0).float()  # avoid nans
 
         compute_group_avg = lambda m: ((group_map.t() @ m.view(-1).cuda()) / n)
 
         group_cross_entropy = compute_group_avg(cross_entropies)
         group_acc = compute_group_avg((torch.argmax(y_hat, 1) == y['Blond_Hair']).float())
 
-        return group_cross_entropy, group_acc
+        return group_cross_entropy, group_acc, group_counts
 
-    def step(self, batch, is_train=True):
-        global hsic, y_hat
+    def __update_hsic_weight(self):
+        if self.config.hsic.name == "constant_weight":
+            self.__hsic_weight = self.config.hsic.weight
+        else:
+            self.__hsic_weight = self.config.hsic.start_weight + (
+                    self.trainer.current_epoch // self.config.hsic.frequency) * self.config.hsic.step
 
+    def __step(self, batch, is_train=True):
         x, y = batch
         group_indices = y['group_idx']
 
-        c = one_hot(group_indices % 2, num_classes=2).float()  # female to 1 0, male to
+        y_hat, emb = self.network.get_y_and_emb(x)
+        hsic = HSIC(emb, y_hat)
 
-        if self.config.hsic.on_output:
-            y_hat = self.forward(x)
-            hsic = HSIC(c, y_hat)
-        else:
-            y_hat, emb = self.network.get_y_and_emb(x)
-            hsic = HSIC(emb, y_hat)
+        cross_entropies = self.__cross_entropy(y_hat, y['Blond_Hair'])
 
-        cross_entropies = self.cross_entropy(y_hat, y['Blond_Hair'])
-        group_cross_entropy, group_acc = self.__get_group_metrics(y, y_hat, cross_entropies)
+        group_cross_entropy, group_acc, group_counts = self.__get_group_metrics(y, y_hat, cross_entropies)
 
         if self.config.trainer.group_dro and is_train:
-            self.group_weights = self.group_weights * torch.exp(self.config.trainer.group_weight_step * group_cross_entropy.to('cpu'))
-            self.group_weights = (self.group_weights / (self.group_weights.sum()))
+            self.__group_weights = self.__group_weights * torch.exp(
+                self.config.trainer.group_weight_step * group_cross_entropy.to('cpu'))
+            self.__group_weights = (self.__group_weights / (self.__group_weights.sum()))
 
         group_indices_one_hot = one_hot(group_indices, 4).float()
 
-        weights = torch.matmul(group_indices_one_hot, self.group_weights.to(group_indices_one_hot.device))
+        weights = torch.matmul(group_indices_one_hot, self.__group_weights.to(group_indices_one_hot.device))
 
         cross_entropies *= torch.tensor(weights)
 
         cross_entropy = cross_entropies.mean()
         acc = accuracy(y_hat, y['Blond_Hair'])
 
-        global hsic_weight
-        if self.config.hsic.name == "constant_weight":
-            hsic_weight = self.config.hsic.weight
-        else:
-            hsic_weight = self.config.hsic.start_weight + (self.trainer.current_epoch // self.config.hsic.frequency) * self.config.hsic.step
+        self.__update_hsic_weight()
 
-        loss = cross_entropy + hsic_weight * hsic
+        loss = cross_entropy + self.__hsic_weight * hsic
 
         metrics = {
             'acc': acc,
             'loss': loss,
             'hsic': hsic,
-            'hsic_weight': hsic_weight,
             'cross_entropy': cross_entropy,
 
-            'cross_entropy_group_0': group_cross_entropy[0],
-            'cross_entropy_group_1': group_cross_entropy[1],
-            'cross_entropy_group_2': group_cross_entropy[2],
-            'cross_entropy_group_3': group_cross_entropy[3],
+            'group_cross_entropy': group_cross_entropy.to('cpu'),
+            'group_acc': group_acc.to('cpu'),
+            'group_counts': group_counts.to('cpu')
+        }
+
+        return metrics
+
+    def __calculate_epoch_metrics(self, outputs: List[Any]) -> dict:
+        acc = 0
+        loss = 0
+        hsic = 0
+        cross_entropy = 0
+        group_cross_entropy = torch.zeros(4)
+        group_acc = torch.zeros(4)
+        group_counts = torch.zeros(4)
+        for o in outputs:
+            group_cross_entropy += o["group_cross_entropy"] * o["group_counts"]
+            group_acc += o["group_acc"] * o["group_counts"]
+            group_counts += o["group_counts"]
+            acc += o["acc"]
+            loss += o["loss"]
+            hsic += o["hsic"]
+            cross_entropy += o["cross_entropy"]
+
+        steps_count = len(outputs)
+        group_cross_entropy /= group_counts
+        group_acc /= group_counts
+        acc /= steps_count
+        loss /= steps_count
+        cross_entropy /= steps_count
+        hsic /= steps_count
+
+        epoch_metrics_sep = {
+            'acc': acc,
+            'loss': loss,
+            'hsic': hsic,
+            'cross_entropy': cross_entropy,
+
+            "cross_entropy_group_0": group_cross_entropy[0],
+            "cross_entropy_group_1": group_cross_entropy[1],
+            "cross_entropy_group_2": group_cross_entropy[2],
+            "cross_entropy_group_3": group_cross_entropy[3],
 
             'acc_group_0': group_acc[0],
             'acc_group_1': group_acc[1],
             'acc_group_2': group_acc[2],
             'acc_group_3': group_acc[3],
-
-            'w_group_0': self.group_weights[0],
-            'w_group_1': self.group_weights[1],
-            'w_group_2': self.group_weights[2],
-            'w_group_3': self.group_weights[3],
         }
 
-        return loss, metrics
+        epoch_metrics_shared = {
+            "learning_rate": self.trainer.optimizers[0].param_groups[0]["lr"],
 
-    def training_step(self, batch, *args, **kwargs):
-        loss, metrics = self.step(batch)
-        metrics = {f'train_{key}': metrics[key] for key in metrics}
-        metrics.update({"learning_rate": self.trainer.optimizers[0].param_groups[0]["lr"]})
-        self.log_dict(metrics, on_step=False, on_epoch=True, prog_bar=True)
+            "hsic_weight": self.__hsic_weight,
 
-        return loss
+            'w_group_0': self.__group_weights[0],
+            'w_group_1': self.__group_weights[1],
+            'w_group_2': self.__group_weights[2],
+            'w_group_3': self.__group_weights[3],
+        }
 
-    def validation_step(self, batch, *args, **kwargs):
-        loss, metrics = self.step(batch, is_train=False)
-        metrics = {f'val_{key}': metrics[key] for key in metrics}
-        self.log_dict(metrics, on_step=False, on_epoch=True, prog_bar=True)
+        self.logger.log_metrics(epoch_metrics_shared, self.trainer.current_epoch)
 
-        return loss
+        return epoch_metrics_sep
 
 
 @hydra.main(config_path="config", config_name="train")

@@ -2,7 +2,6 @@
 name: linear_increasing_weight
 
 start_weight: 0
-on_output: False  #  calculates HSIC on output if True else calculates on the last hidden layer
 
 step: 10
 frequency: 25

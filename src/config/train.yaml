@@ -4,9 +4,9 @@ logs_root_dir: "./logs"
 defaults:
   - dataset: celeba
   - network: resnet50
-  - optimizer: adam
+  - optimizer: sgd
   - trainer: standard
-  - scheduler: plateau
+  - scheduler: disabled
   - logger: tensorboard
   - hsic: constant_weight
 
