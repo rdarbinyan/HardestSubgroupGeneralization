@@ -39,6 +39,13 @@ class CelebADataModule(pl.LightningDataModule):
 
         self.sampler = sampler
 
+        self.__transform = transforms.Compose([
+            transforms.CenterCrop(224),
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ])
+
     def __target_transform(self, y):
         target_names = [self.confounder_name, self.target_name]
         attr_dict = dict(zip(self.CELEBA_ATTRIBUTE_NAMES, y))
@@ -68,28 +75,14 @@ class CelebADataModule(pl.LightningDataModule):
                                           split='train',
                                           download=self.download,
                                           target_transform=self.__target_transform,
-                                          transform=transforms.Compose([
-                                              transforms.RandomResizedCrop(
-                                                  (224, 224),
-                                                  scale=(0.7, 1.0),
-                                                  ratio=(1.0, 1.3333333333333333),
-                                                  interpolation=2),
-                                              transforms.RandomHorizontalFlip(),
-                                              transforms.ToTensor(),
-                                              transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-                                          ]))
+                                          transform=self.__transform)
 
         self.val_data = datasets.CelebA(self.data_root,
                                         target_type='attr',
                                         split='valid',
                                         download=self.download,
                                         target_transform=self.__target_transform,
-                                        transform=transforms.Compose([
-                                            transforms.CenterCrop(224),
-                                            transforms.Resize((224, 224)),
-                                            transforms.ToTensor(),
-                                            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-                                        ]))
+                                        transform=self.__transform)
 
         self.__set_group_counts()
 

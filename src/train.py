@@ -64,13 +64,15 @@ class Model(pl.LightningModule, ConfigParser):
         epoch_metrics = self.__calculate_epoch_metrics(outputs)
         epoch_metrics = {f'train_{key}': epoch_metrics[key] for key in epoch_metrics}
 
-        self.logger.log_metrics(epoch_metrics, self.trainer.current_epoch)
+        if self.logger:
+            self.logger.log_metrics(epoch_metrics, self.trainer.current_epoch)
 
     def validation_epoch_end(self, outputs: List[Any]) -> None:
         epoch_metrics = self.__calculate_epoch_metrics(outputs)
         epoch_metrics = {f'val_{key}': epoch_metrics[key] for key in epoch_metrics}
 
-        self.logger.log_metrics(epoch_metrics, self.trainer.current_epoch)
+        if self.logger:
+            self.logger.log_metrics(epoch_metrics, self.trainer.current_epoch)
 
     @staticmethod
     def __get_initial_group_weights(groups_count):
@@ -81,8 +83,8 @@ class Model(pl.LightningModule, ConfigParser):
         return group_weights
 
     @staticmethod
-    def __get_group_metrics(y, y_hat, cross_entropies):
-        group_map = one_hot(y['group_idx'], num_classes=4).float()
+    def __get_group_metrics(y, y_hat, group_indices, cross_entropies):
+        group_map = one_hot(group_indices, num_classes=4).float()
 
         group_counts = group_map.sum(0)
         n = group_counts + (group_counts == 0).float()  # avoid nans
@@ -90,7 +92,7 @@ class Model(pl.LightningModule, ConfigParser):
         compute_group_avg = lambda m: ((group_map.t() @ m.view(-1).cuda()) / n)
 
         group_cross_entropy = compute_group_avg(cross_entropies)
-        group_acc = compute_group_avg((torch.argmax(y_hat, 1) == y['Blond_Hair']).float())
+        group_acc = compute_group_avg((torch.argmax(y_hat, 1) == y).float())
 
         return group_cross_entropy, group_acc, group_counts
 
@@ -102,29 +104,30 @@ class Model(pl.LightningModule, ConfigParser):
                     self.trainer.current_epoch // self.config.hsic.frequency) * self.config.hsic.step
 
     def __step(self, batch, is_train=True):
-        x, y = batch
-        group_indices = y['group_idx']
+        x, attr = batch
+        y = attr['Blond_Hair']
+        group_indices = attr['group_idx']
 
         y_hat, emb = self.network.get_y_and_emb(x)
         hsic = HSIC(emb, y_hat)
 
-        cross_entropies = self.__cross_entropy(y_hat, y['Blond_Hair'])
+        cross_entropies = self.__cross_entropy(y_hat, y)
 
-        group_cross_entropy, group_acc, group_counts = self.__get_group_metrics(y, y_hat, cross_entropies)
+        group_cross_entropy, group_acc, group_counts = self.__get_group_metrics(y, y_hat, group_indices, cross_entropies)
 
         if self.config.trainer.group_dro and is_train:
             self.__group_weights = self.__group_weights * torch.exp(
                 self.config.trainer.group_weight_step * group_cross_entropy.to('cpu'))
             self.__group_weights = (self.__group_weights / (self.__group_weights.sum()))
 
-        group_indices_one_hot = one_hot(group_indices, 4).float()
+            group_indices_one_hot = one_hot(group_indices, 4).float()
 
-        weights = torch.matmul(group_indices_one_hot, self.__group_weights.to(group_indices_one_hot.device))
+            weights = torch.matmul(group_indices_one_hot, self.__group_weights.to(group_indices_one_hot.device))
 
-        cross_entropies *= torch.tensor(weights)
+            cross_entropies *= torch.tensor(weights)
 
         cross_entropy = cross_entropies.mean()
-        acc = accuracy(y_hat, y['Blond_Hair'])
+        acc = accuracy(y_hat, y)
 
         self.__update_hsic_weight()
 
@@ -196,7 +199,8 @@ class Model(pl.LightningModule, ConfigParser):
             'w_group_3': self.__group_weights[3],
         }
 
-        self.logger.log_metrics(epoch_metrics_shared, self.trainer.current_epoch)
+        if self.logger:
+            self.logger.log_metrics(epoch_metrics_shared, self.trainer.current_epoch)
 
         return epoch_metrics_sep
 

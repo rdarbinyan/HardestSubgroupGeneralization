@@ -1,8 +1,8 @@
-import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional, Union
 
+import wandb
 from omegaconf import DictConfig
 from pydantic.dataclasses import dataclass
 from pytorch_lightning import loggers as pl_loggers
@@ -42,6 +42,7 @@ class TensorboardConf(LoggerConf):
 
         return tb_logger
 
+
 @dataclass(frozen=True)
 class AimConf(LoggerConf):
     experiment: str
@@ -54,10 +55,34 @@ class AimConf(LoggerConf):
         return aim_logger
 
 
+@dataclass(frozen=True)
+class WandbConf(LoggerConf):
+    entity: str
+    project: str
+    run_name: Optional[str]
+    run_id: Optional[str] = None  # Pass run_id to resume logging to that run.
+
+    def get_logger(self, save_dir: Path) -> pl_loggers.WandbLogger:
+        args_dict = asdict_filtered(self)
+        run_name = args_dict.pop("run_name")
+        run_id = args_dict.pop("run_id")
+
+        wb_logger = pl_loggers.WandbLogger(name=run_name, id=run_id, save_dir=str(save_dir), **args_dict)
+
+        return wb_logger
+
+    def get_run_id(self):
+        if self.run_id is None:
+            self.run_id = wandb.util.generate_id()
+
+        return self.run_id
+
+
 valid_names = {
     "disabled": DisabledLoggerConf,
     "tensorboard": TensorboardConf,
     "aim": AimConf,
+    "wandb": WandbConf
 }
 
 
