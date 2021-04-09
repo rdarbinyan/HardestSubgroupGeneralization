@@ -105,11 +105,14 @@ class Model(pl.LightningModule, ConfigParser):
 
     def __step(self, batch, is_train=True):
         x, attr = batch
+
         y = attr['Blond_Hair']
         group_indices = attr['group_idx']
+        c = one_hot(attr['Male'] % 2, num_classes=2).float()
 
         y_hat, emb = self.network.get_y_and_emb(x)
-        hsic = HSIC(emb, y_hat)
+
+        hsic = HSIC(emb, c)
 
         cross_entropies = self.__cross_entropy(y_hat, y)
 
