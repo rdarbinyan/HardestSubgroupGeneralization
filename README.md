@@ -42,6 +42,7 @@ trainer:
   checkpoint_callback: false
   group_dro: false
   group_weight_step: 0.1
+  gradient_clip_val: 0
   log_every_n_steps: 50
   progress_bar_refresh_rate: 50
 scheduler:

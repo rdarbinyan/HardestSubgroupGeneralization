@@ -25,6 +25,7 @@ class StandardTrainerConfig(TrainerConf):
     checkpoint_callback: bool # in the future, will checkpoint type will be allowed
     group_dro: bool
     group_weight_step: float
+    gradient_clip_val: float
 
     log_every_n_steps: int
     progress_bar_refresh_rate: int
